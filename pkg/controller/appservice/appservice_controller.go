@@ -3,7 +3,7 @@ package appservice
 import (
 	"context"
 
-	appv1alpha1 "github.com/example-inc/app-operator/pkg/apis/app/v1alpha1"
+	appv1alpha1 "github.com/majorinche/app-operator/pkg/apis/app/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -144,7 +144,7 @@ func newPodForCR(cr *appv1alpha1.AppService) *corev1.Pod {
 				{
 					Name:    "majorinche",
 					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
+					Command: []string{"sleep", "360000"},
 				},
 			},
 		},
