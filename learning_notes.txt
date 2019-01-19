@@ -1,0 +1,63 @@
+1， crd是随便加的，更operator没关系，只是后期operator需要用到这个crd定义的名称而已
+2. operator的yaml文件只是调用了一个docker镜像，所以主要点还是在pkg目录下
+3，main.go最核心的也是调用pkg目录下的operator代码
+func main() {
+	resource := "app.example.com/v1alpha1"  //这个就是group定义的资源
+	kind := "Netperf"
+	namespace, err := k8sutil.GetWatchNamespace()  //这个是根据之前的WATCH_NAMESPACE定义好的，默认是default
+	if err != nil {
+		logrus.Fatalf("Failed to get watch namespace: %v", err)
+	}
+	resyncPeriod := 5
+	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
+	sdk.Watch(resource, kind, namespace, resyncPeriod)  //检查resource是否存在
+	sdk.Watch("v1", "Pod", namespace, resyncPeriod) //检查是否存在pod
+	sdk.Handle(stub.NewHandler(operator.NewNetperf(realkube.NewRealProvider()))) //返回一个provider，然后交给NewHandler去处理
+	sdk.Run(context.TODO())
+}
+
+
+3.1 watch的定义
+watch最终效果是增加一个informer而已，informers应该是一个队列
+func Watch(apiVersion, kind, namespace string, resyncPeriod int) {
+	resourceClient, resourcePluralName, err := k8sclient.GetResourceClient(apiVersion, kind, namespace)
+	// TODO: Better error handling, e.g retry
+	if err != nil {
+		logrus.Errorf("failed to get resource client for (apiVersion:%s, kind:%s, ns:%s): %v", apiVersion, kind, namespace, err)
+		panic(err)
+	}
+	informer := NewInformer(resourcePluralName, namespace, resourceClient, resyncPeriod)
+	informers = append(informers, informer)
+}
+
+3.2 handle的定义，最终是交给handlenetperf来处理
+func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
+	switch event.Object.(type) {
+	case *v1alpha1.Netperf:
+		netperf := event.Object.(*v1alpha1.Netperf)
+		return h.operator.HandleNetperf(netperf, event.Deleted)
+	case *v1.Pod:
+		pod := event.Object.(*v1.Pod)
+		return h.operator.HandlePod(pod, event.Deleted)
+	default:
+		logrus.Warnf("unknown event received: %s", event)
+	}
+	return nil
+}
+
+func (n *Netperf) HandleNetperf(o *v1alpha1.Netperf, deleted bool) error {
+	logrus.Debugf("New Netperf event, name: %s, deleted: %v, status: %v", o.Name, deleted, o.Status.Status)
+	if deleted {
+		return n.deleteNetperfPods(o)
+	}
+	return n.handleNetperfUpdateEvent(o)
+}
+
+
+4. 创建pod的语句
+func (n *Netperf) startServerPod(cr *v1alpha1.Netperf) error {*od只是定义了pod的规格
+4.2 n就是代表了一个Netperf结构体，这个结构体包含一个provider定义
+这n不仅仅包含provider，只要函数带有(n *Netpef)的，这函数就会自动加入到n结构体中去，这还是很有意思的
+
+4.3 cr代表了*v1alpha1.Netperf，一个指针变量，这个也很有意思，比较特殊，不加以对待，可能就会confuse
+代表了一种kind对象，例如其他代码中也会这样写
